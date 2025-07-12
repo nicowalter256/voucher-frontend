@@ -70,5 +70,16 @@ export const publicFetch = async (endpoint, options = {}) => {
     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
   }
 
+  // For 201 status (Created), don't try to parse JSON if there's no content
+  if (response.status === 201) {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    } else {
+      // Return success object for 201 without JSON response
+      return { success: true, status: 201 };
+    }
+  }
+
   return response.json();
 }; 

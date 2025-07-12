@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Copy, CheckCircle, XCircle, Clock, DollarSign, Users, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Copy, CheckCircle, XCircle, Clock, DollarSign, Users, Loader2, RefreshCw, CreditCard, Receipt, LayoutDashboard } from 'lucide-react';
 import { authenticatedFetch } from './utils/api';
 import { API_ENDPOINTS } from './config';
+import PaymentForm from './components/PaymentForm';
+import PaymentsView from './components/PaymentsView';
 
-const VoucherManager = () => {
+const VoucherManager = ({ user, onLogout, onViewChange }) => {
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [creatingVoucher, setCreatingVoucher] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showPaymentsView, setShowPaymentsView] = useState(false);
+  const [selectedVoucher, setSelectedVoucher] = useState(null);
+  const [processingPayment, setProcessingPayment] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [stats, setStats] = useState({ total: 0, active: 0, used: 0, revenue: 0 });
@@ -140,6 +146,47 @@ const VoucherManager = () => {
     }
   };
 
+  // Initiate payment for a voucher
+  const initiatePayment = async (paymentData) => {
+    setProcessingPayment(true);
+    try {
+      const response = await authenticatedFetch('/payments/init', {
+        method: 'POST',
+        body: JSON.stringify(paymentData)
+      });
+
+      if (window.showToast) {
+        window.showToast('Payment initiated successfully!', 'success');
+      }
+      
+      // Close modal and refresh vouchers
+      setShowPaymentModal(false);
+      setSelectedVoucher(null);
+      loadVouchers();
+      
+    } catch (error) {
+      console.error('Error initiating payment:', error);
+      if (window.showToast) {
+        window.showToast(`Failed to initiate payment: ${error.message}`, 'error');
+      }
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  // Handle payment modal open
+  const openPaymentModal = (voucher) => {
+    setSelectedVoucher(voucher);
+    setShowPaymentModal(true);
+  };
+
+  // Navigate to main dashboard
+  const navigateToDashboard = () => {
+    if (onViewChange) {
+      onViewChange('dashboard');
+    }
+  };
+
   // Filter vouchers
   const filteredVouchers = vouchers.filter(voucher => {
     const matchesSearch = voucher.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -196,6 +243,13 @@ const VoucherManager = () => {
               <Plus className="w-4 h-4" />
               Create Voucher
             </button>
+            <button
+              onClick={() => setShowPaymentsView(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Receipt className="w-4 h-4" />
+              View Payments
+            </button>
           </div>
         </div>
 
@@ -237,13 +291,16 @@ const VoucherManager = () => {
               <Clock className="w-8 h-8 text-yellow-500" />
             </div>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <div className="flex items-center justify-between">
+          <div 
+            onClick={navigateToDashboard}
+            className="bg-gradient-to-r from-purple-500 to-indigo-600 p-6 rounded-lg shadow-sm border cursor-pointer hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 transform hover:scale-105"
+          >
+            <div className="flex items-center justify-between text-white">
               <div>
-                <p className="text-sm text-gray-600">Revenue</p>
-                <p className="text-2xl font-bold text-green-600">UGX {stats.revenue.toLocaleString()}</p>
+                <p className="text-sm opacity-90">Main Dashboard</p>
+                <p className="text-lg font-bold">System Overview</p>
               </div>
-              <DollarSign className="w-8 h-8 text-green-500" />
+              <LayoutDashboard className="w-8 h-8" />
             </div>
           </div>
         </div>
@@ -353,7 +410,23 @@ const VoucherManager = () => {
                         {new Date(voucher.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button className="text-blue-600 hover:text-blue-900" title="View"><CheckCircle className="w-4 h-4" /></button>
+                        <div className="flex items-center gap-2">
+                          {voucher.status === 'active' && (
+                            <button
+                              onClick={() => openPaymentModal(voucher)}
+                              className="text-green-600 hover:text-green-900"
+                              title="Initiate Payment"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button 
+                            className="text-blue-600 hover:text-blue-900" 
+                            title="View Details"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -455,6 +528,48 @@ const VoucherManager = () => {
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Modal */}
+        {showPaymentModal && selectedVoucher && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4">Initiate Payment</h3>
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">Voucher: <span className="font-mono font-medium">{selectedVoucher.code}</span></p>
+                <p className="text-sm text-gray-600">Package: <span className="capitalize">{selectedVoucher.package_type}</span></p>
+              </div>
+              
+              <PaymentForm 
+                voucher={selectedVoucher}
+                onSubmit={initiatePayment}
+                onCancel={() => {
+                  setShowPaymentModal(false);
+                  setSelectedVoucher(null);
+                }}
+                processing={processingPayment}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Payments View Modal */}
+        {showPaymentsView && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">My Payments</h3>
+                <button
+                  onClick={() => setShowPaymentsView(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <PaymentsView onClose={() => setShowPaymentsView(false)} />
             </div>
           </div>
         )}

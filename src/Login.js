@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, User, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, AlertCircle, Phone, UserPlus } from 'lucide-react';
 import { API_ENDPOINTS, DEMO_CREDENTIALS, STORAGE_KEYS } from './config';
 import { publicFetch } from './utils/api';
 
 const Login = ({ onLogin }) => {
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
+    phone: '',
+    fullname: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
@@ -42,6 +45,18 @@ const Login = ({ onLogin }) => {
       newErrors.password = 'Password must be at least 6 characters';
     }
 
+    if (isRegisterMode) {
+      if (!formData.fullname.trim()) {
+        newErrors.fullname = 'Full name is required';
+      }
+
+      if (!formData.phone.trim()) {
+        newErrors.phone = 'Phone number is required';
+      } else if (!/^\+?256\d{9}$/.test(formData.phone.replace(/\s/g, ''))) {
+        newErrors.phone = 'Please enter a valid Ugandan phone number (e.g., +256776401884)';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -56,36 +71,71 @@ const Login = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      const data = await publicFetch(API_ENDPOINTS.LOGIN, {
-        method: 'POST',
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password
-        })
-      });
-      
-      // Store login state and token
-      localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify({ 
-        ...data.user,
-        token: data.token
-      }));
-      localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
-      
-      if (window.showToast) {
-        window.showToast('Login successful! Welcome back.', 'success');
-      }
-      
-      onLogin({ 
-        ...data.user,
-        token: data.token
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      if (window.showToast) {
-        window.showToast(error.message || 'Login failed. Please try again.', 'error');
+      if (isRegisterMode) {
+        // Format phone number
+        let formattedPhone = formData.phone.replace(/\s/g, '');
+        if (!formattedPhone.startsWith('+')) {
+          formattedPhone = '+' + formattedPhone;
+        }
+        if (formattedPhone.startsWith('+0')) {
+          formattedPhone = '+256' + formattedPhone.substring(2);
+        }
+        if (formattedPhone.startsWith('+2560')) {
+          formattedPhone = '+256' + formattedPhone.substring(5);
+        }
+
+        // Register user
+        await publicFetch(API_ENDPOINTS.REGISTER, {
+          method: 'POST',
+          body: JSON.stringify({
+            phone: formattedPhone,
+            password: formData.password,
+            email: formData.email,
+            fullname: formData.fullname
+          })
+        });
+
+        if (window.showToast) {
+          window.showToast('Registration successful! Please sign in.', 'success');
+        }
+        
+        // Switch back to login mode
+        setIsRegisterMode(false);
+        setFormData({ email: formData.email, password: '', phone: '', fullname: '' });
+        setErrors({});
       } else {
-        setErrors({ general: error.message || 'Login failed. Please try again.' });
+        // Login user
+        const data = await publicFetch(API_ENDPOINTS.LOGIN, {
+          method: 'POST',
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password
+          })
+        });
+        
+        // Store login state and token
+        localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify({ 
+          ...data.user,
+          token: data.token
+        }));
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
+        
+        if (window.showToast) {
+          window.showToast('Login successful! Welcome back.', 'success');
+        }
+        
+        onLogin({ 
+          ...data.user,
+          token: data.token
+        });
+      }
+    } catch (error) {
+      console.error(isRegisterMode ? 'Registration error:' : 'Login error:', error);
+      if (window.showToast) {
+        window.showToast(error.message || (isRegisterMode ? 'Registration failed. Please try again.' : 'Login failed. Please try again.'), 'error');
+      } else {
+        setErrors({ general: error.message || (isRegisterMode ? 'Registration failed. Please try again.' : 'Login failed. Please try again.') });
       }
     } finally {
       setIsLoading(false);
@@ -98,13 +148,13 @@ const Login = ({ onLogin }) => {
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4">
-            <Lock className="h-8 w-8 text-white" />
+            {isRegisterMode ? <UserPlus className="h-8 w-8 text-white" /> : <Lock className="h-8 w-8 text-white" />}
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome to MoWave
+            {isRegisterMode ? 'Create Account' : 'Welcome to MoWave'}
           </h2>
           <p className="text-gray-600">
-            Sign in to access your hotspot management dashboard
+            {isRegisterMode ? 'Sign up to get started with hotspot management' : 'Sign in to access your hotspot management dashboard'}
           </p>
         </div>
 
@@ -146,6 +196,69 @@ const Login = ({ onLogin }) => {
                 <p className="mt-1 text-sm text-red-600">{errors.email}</p>
               )}
             </div>
+
+            {/* Full Name Field - Only in Register Mode */}
+            {isRegisterMode && (
+              <div>
+                <label htmlFor="fullname" className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <User className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="fullname"
+                    name="fullname"
+                    type="text"
+                    value={formData.fullname}
+                    onChange={handleInputChange}
+                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                      errors.fullname 
+                        ? 'border-red-300 bg-red-50' 
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                    placeholder="Enter your full name"
+                  />
+                </div>
+                {errors.fullname && (
+                  <p className="mt-1 text-sm text-red-600">{errors.fullname}</p>
+                )}
+              </div>
+            )}
+
+            {/* Phone Number Field - Only in Register Mode */}
+            {isRegisterMode && (
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Phone className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                      errors.phone 
+                        ? 'border-red-300 bg-red-50' 
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                    placeholder="+256776401884"
+                  />
+                </div>
+                {errors.phone && (
+                  <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter your Ugandan phone number
+                </p>
+              </div>
+            )}
 
             {/* Password Field */}
             <div>
@@ -215,10 +328,10 @@ const Login = ({ onLogin }) => {
               {isLoading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Signing in...
+                  {isRegisterMode ? 'Creating account...' : 'Signing in...'}
                 </div>
               ) : (
-                'Sign in'
+                isRegisterMode ? 'Create Account' : 'Sign in'
               )}
             </button>
           </form>
@@ -240,10 +353,17 @@ const Login = ({ onLogin }) => {
         {/* Footer */}
         <div className="text-center">
           <p className="text-sm text-gray-500">
-            Don't have an account?{' '}
-            <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-              Contact administrator
-            </a>
+            {isRegisterMode ? 'Already have an account?' : "Don't have an account?"}{' '}
+            <button
+              onClick={() => {
+                setIsRegisterMode(!isRegisterMode);
+                setFormData({ email: '', password: '', phone: '', fullname: '' });
+                setErrors({});
+              }}
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              {isRegisterMode ? 'Sign in' : 'Create account'}
+            </button>
           </p>
         </div>
       </div>

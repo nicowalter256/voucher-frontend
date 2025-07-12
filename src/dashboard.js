@@ -28,7 +28,7 @@ import {
   User
 } from 'lucide-react';
 
-const MoWaveArchitectureApp = ({ user, onLogout }) => {
+const MoWaveArchitectureApp = ({ user, onLogout, onViewChange }) => {
   const [activeSection, setActiveSection] = useState('overview');
   const [completedComponents, setCompletedComponents] = useState(new Set());
   const [expandedSections, setExpandedSections] = useState(new Set(['core']));
@@ -661,6 +661,13 @@ const MoWaveArchitectureApp = ({ user, onLogout }) => {
               <p className="text-gray-600">Comprehensive hotspot voucher system development tracker</p>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => onViewChange && onViewChange('vouchers')}
+                className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                <CreditCard className="w-4 h-4" />
+                Voucher Management
+              </button>
               <div className="flex items-center gap-2 text-gray-700">
                 <User className="w-4 h-4" />
                 <span className="text-sm font-medium">Welcome, {user?.email || user?.username || 'User'}</span>
